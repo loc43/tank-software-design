@@ -22,72 +22,247 @@ import static com.badlogic.gdx.graphics.GL20.GL_COLOR_BUFFER_BIT;
 import static com.badlogic.gdx.math.MathUtils.isEqual;
 import static ru.mipt.bit.platformer.util.GdxGameUtils.*;
 
-public class GameDesktopLauncher implements ApplicationListener {
+interface GameObject {
+    TextureRegion getGraphics();
+    Rectangle getRectangle();
+    GridPoint2 getCoordinates();
+    float getRotation();
+    void update(float deltaTime);
+    void dispose();
+}
 
-    private static final float MOVEMENT_SPEED = 0.4f;
+interface InputHandler {
+    boolean isMoveUp();
+    boolean isMoveDown();
+    boolean isMoveLeft();
+    boolean isMoveRight();
+}
 
-    private Batch batch;
+class Player implements GameObject {
+    private Texture texture;
+    private TextureRegion graphics;
+    private Rectangle rectangle;
+    private GridPoint2 coordinates;
+    private GridPoint2 destinationCoordinates;
+    private float movementProgress = 1f;
+    private Direction rotation;
 
-    private TiledMap level;
-    private MapRenderer levelRenderer;
-    private TileMovement tileMovement;
+    public Player(String texturePath, GridPoint2 startPosition) {
+        this.texture = new Texture(texturePath);
+        this.graphics = new TextureRegion(texture);
+        this.rectangle = createBoundingRectangle(graphics);
+        this.coordinates = new GridPoint2(startPosition);
+        this.destinationCoordinates = new GridPoint2(startPosition);
+        this.rotation = Direction.RIGHT;
+    }
 
-    private Texture blueTankTexture;
-    private TextureRegion playerGraphics;
-    private Rectangle playerRectangle;
-    // player current position coordinates on level 10x8 grid (e.g. x=0, y=1)
-    private GridPoint2 playerCoordinates;
-    // which tile the player want to go next
-    private GridPoint2 playerDestinationCoordinates;
-    private float playerMovementProgress = 1f;
-    private Direction playerRotation;
+    @Override
+    public TextureRegion getGraphics() { return graphics; }
+    @Override
+    public Rectangle getRectangle() { return rectangle; }
+    @Override
+    public GridPoint2 getCoordinates() { return coordinates; }
+    @Override
+    public float getRotation() { return rotation.getRotation(); }
+    @Override
+    public void update(float deltaTime) { }
+    @Override
+    public void dispose() { if (texture != null) texture.dispose(); }
 
-    private Texture greenTreeTexture;
-    private TextureRegion treeObstacleGraphics;
-    private GridPoint2 treeObstacleCoordinates = new GridPoint2();
-    private Rectangle treeObstacleRectangle = new Rectangle();
+    public GridPoint2 getDestinationCoordinates() { return destinationCoordinates; }
+    public void setDestinationCoordinates(GridPoint2 destinationCoordinates) { this.destinationCoordinates = destinationCoordinates; }
+    public float getMovementProgress() { return movementProgress; }
+    public void setMovementProgress(float movementProgress) { this.movementProgress = movementProgress; }
+    public Direction getRotationDirection() { return rotation; }
+    public void setRotation(Direction rotation) { this.rotation = rotation; }
+}
 
-    private void tryMove(Direction direction) {
-        if (isEqual(playerMovementProgress, 1f)) {
-            GridPoint2 offset = direction.getMovementOffset();
-            GridPoint2 targetPosition = new GridPoint2(
-                playerCoordinates.x + offset.x,
-                playerCoordinates.y + offset.y
-            );
-            
-            if (!treeObstacleCoordinates.equals(targetPosition)) {
-                playerDestinationCoordinates.set(targetPosition);
-                playerMovementProgress = 0f;
-                playerRotation = direction;
+class Obstacle implements GameObject {
+    private Texture texture;
+    private TextureRegion graphics;
+    private Rectangle rectangle;
+    private GridPoint2 coordinates;
+
+    public Obstacle(String texturePath, GridPoint2 position) {
+        this.texture = new Texture(texturePath);
+        this.graphics = new TextureRegion(texture);
+        this.rectangle = createBoundingRectangle(graphics);
+        this.coordinates = new GridPoint2(position);
+    }
+
+    @Override
+    public TextureRegion getGraphics() { return graphics; }
+    @Override
+    public Rectangle getRectangle() { return rectangle; }
+    @Override
+    public GridPoint2 getCoordinates() { return coordinates; }
+    @Override
+    public float getRotation() { return 0f; }
+    @Override
+    public void update(float deltaTime) { }
+    @Override
+    public void dispose() { if (texture != null) texture.dispose(); }
+}
+
+class KeyboardInputHandler implements InputHandler {
+    @Override
+    public boolean isMoveUp() {
+        return Gdx.input.isKeyPressed(UP) || Gdx.input.isKeyPressed(W);
+    }
+    @Override
+    public boolean isMoveDown() {
+        return Gdx.input.isKeyPressed(DOWN) || Gdx.input.isKeyPressed(S);
+    }
+    @Override
+    public boolean isMoveLeft() {
+        return Gdx.input.isKeyPressed(LEFT) || Gdx.input.isKeyPressed(A);
+    }
+    @Override
+    public boolean isMoveRight() {
+        return Gdx.input.isKeyPressed(RIGHT) || Gdx.input.isKeyPressed(D);
+    }
+}
+
+class PlayerController {
+    private final Player player;
+    private final InputHandler inputHandler;
+    private final TileMovement tileMovement;
+    private final float movementSpeed;
+
+    public PlayerController(Player player, InputHandler inputHandler, TileMovement tileMovement, float movementSpeed) {
+        this.player = player;
+        this.inputHandler = inputHandler;
+        this.tileMovement = tileMovement;
+        this.movementSpeed = movementSpeed;
+    }
+
+    public void update(float deltaTime) {
+        handleInput();
+        updateMovement(deltaTime);
+    }
+
+    private void handleInput() {
+        if (isEqual(player.getMovementProgress(), 1f)) {
+            Direction direction = getMovementDirection();
+            if (direction != null) {
+                tryMove(direction);
             }
         }
     }
 
+    private Direction getMovementDirection() {
+        if (inputHandler.isMoveUp()) return Direction.UP;
+        if (inputHandler.isMoveLeft()) return Direction.LEFT;
+        if (inputHandler.isMoveDown()) return Direction.DOWN;
+        if (inputHandler.isMoveRight()) return Direction.RIGHT;
+        return null;
+    }
+
+    private void tryMove(Direction direction) {
+        GridPoint2 offset = direction.getMovementOffset();
+        GridPoint2 targetPosition = new GridPoint2(
+            player.getCoordinates().x + offset.x,
+            player.getCoordinates().y + offset.y
+        );
+        
+        // Здесь можно добавить проверку коллизий
+        player.setDestinationCoordinates(targetPosition);
+        player.setMovementProgress(0f);
+        player.setRotation(direction);
+    }
+
+    private void updateMovement(float deltaTime) {
+        float progress = continueProgress(player.getMovementProgress(), deltaTime, movementSpeed);
+        player.setMovementProgress(progress);
+
+        tileMovement.moveRectangleBetweenTileCenters(
+            player.getRectangle(),
+            player.getCoordinates(),
+            player.getDestinationCoordinates(),
+            progress
+        );
+
+        if (isEqual(progress, 1f)) {
+            player.getCoordinates().set(player.getDestinationCoordinates());
+        }
+    }
+
+    private float continueProgress(float progress, float deltaTime, float speed) {
+        return Math.min(1f, progress + deltaTime / speed);
+    }
+}
+
+class GameRenderer {
+    private final Batch batch;
+    private final MapRenderer levelRenderer;
+
+    public GameRenderer(Batch batch, MapRenderer levelRenderer) {
+        this.batch = batch;
+        this.levelRenderer = levelRenderer;
+    }
+
+    public void render(java.util.List<GameObject> gameObjects) {
+        levelRenderer.render();
+        batch.begin();
+        for (GameObject gameObject : gameObjects) {
+            drawTextureRegionUnscaled(batch, gameObject.getGraphics(), gameObject.getRectangle(), gameObject.getRotation());
+        }
+        batch.end();
+    }
+}
+
+public class GameDesktopLauncher implements ApplicationListener {
+
+    private static final float MOVEMENT_SPEED = 0.4f;
+    private static final String LEVEL_PATH = "level.tmx";
+    private static final String PLAYER_TEXTURE = "images/tank_blue.png";
+    private static final String OBSTACLE_TEXTURE = "images/greenTree.png";
+
+    private Batch batch;
+    private TiledMap level;
+    private MapRenderer levelRenderer;
+    private TileMovement tileMovement;
+
+    private Player player;
+    private java.util.List<GameObject> gameObjects;
+    private InputHandler inputHandler;
+    private PlayerController playerController;
+    private GameRenderer gameRenderer;
+
     @Override
     public void create() {
         batch = new SpriteBatch();
+        initializeLevel();
+        initializeGameObjects();
+        initializeSystems();
+    }
 
-        // load level tiles
-        level = new TmxMapLoader().load("level.tmx");
+    private void initializeLevel() {
+        level = new TmxMapLoader().load(LEVEL_PATH);
         levelRenderer = createSingleLayerMapRenderer(level, batch);
         TiledMapTileLayer groundLayer = getSingleLayer(level);
         tileMovement = new TileMovement(groundLayer, Interpolation.smooth);
+    }
 
-        // Texture decodes an image file and loads it into GPU memory, it represents a native resource
-        blueTankTexture = new Texture("images/tank_blue.png");
-        // TextureRegion represents Texture portion, there may be many TextureRegion instances of the same Texture
-        playerGraphics = new TextureRegion(blueTankTexture);
-        playerRectangle = createBoundingRectangle(playerGraphics);
-        // set player initial position
-        playerDestinationCoordinates = new GridPoint2(1, 1);
-        playerCoordinates = new GridPoint2(playerDestinationCoordinates);
-        playerRotation = Direction.RIGHT;
+    private void initializeGameObjects() {
+        gameObjects = new java.util.ArrayList<>();
+        
+        player = new Player(PLAYER_TEXTURE, new GridPoint2(1, 1));
+        gameObjects.add(player);
+        
+        Obstacle obstacle = new Obstacle(OBSTACLE_TEXTURE, new GridPoint2(1, 3));
+        gameObjects.add(obstacle);
+        
+        TiledMapTileLayer groundLayer = getSingleLayer(level);
+        for (GameObject gameObject : gameObjects) {
+            moveRectangleAtTileCenter(groundLayer, gameObject.getRectangle(), gameObject.getCoordinates());
+        }
+    }
 
-        greenTreeTexture = new Texture("images/greenTree.png");
-        treeObstacleGraphics = new TextureRegion(greenTreeTexture);
-        treeObstacleCoordinates = new GridPoint2(1, 3);
-        treeObstacleRectangle = createBoundingRectangle(treeObstacleGraphics);
-        moveRectangleAtTileCenter(groundLayer, treeObstacleRectangle, treeObstacleCoordinates);
+    private void initializeSystems() {
+        inputHandler = new KeyboardInputHandler();
+        playerController = new PlayerController(player, inputHandler, tileMovement, MOVEMENT_SPEED);
+        gameRenderer = new GameRenderer(batch, levelRenderer);
     }
 
     @Override
@@ -96,45 +271,11 @@ public class GameDesktopLauncher implements ApplicationListener {
         Gdx.gl.glClearColor(0f, 0f, 0.2f, 1f);
         Gdx.gl.glClear(GL_COLOR_BUFFER_BIT);
 
-        // get time passed since the last render
         float deltaTime = Gdx.graphics.getDeltaTime();
-
-        if (Gdx.input.isKeyPressed(UP) || Gdx.input.isKeyPressed(W)) {
-            tryMove(Direction.UP);
-        }
-        if (Gdx.input.isKeyPressed(LEFT) || Gdx.input.isKeyPressed(A)) {
-            tryMove(Direction.LEFT);
-        }
-        if (Gdx.input.isKeyPressed(DOWN) || Gdx.input.isKeyPressed(S)) {
-            tryMove(Direction.DOWN);
-        }
-        if (Gdx.input.isKeyPressed(RIGHT) || Gdx.input.isKeyPressed(D)) {
-            tryMove(Direction.RIGHT);
-        }
         
-        // calculate interpolated player screen coordinates
-        tileMovement.moveRectangleBetweenTileCenters(playerRectangle, playerCoordinates, playerDestinationCoordinates, playerMovementProgress);
+        playerController.update(deltaTime);
 
-        playerMovementProgress = continueProgress(playerMovementProgress, deltaTime, MOVEMENT_SPEED);
-        if (isEqual(playerMovementProgress, 1f)) {
-            // record that the player has reached his/her destination
-            playerCoordinates.set(playerDestinationCoordinates);
-        }
-
-        // render each tile of the level
-        levelRenderer.render();
-
-        // start recording all drawing commands
-        batch.begin();
-
-        // render player
-        drawTextureRegionUnscaled(batch, playerGraphics, playerRectangle, playerRotation.getRotation());
-
-        // render tree obstacle
-        drawTextureRegionUnscaled(batch, treeObstacleGraphics, treeObstacleRectangle, 0f);
-
-        // submit all drawing requests
-        batch.end();
+        gameRenderer.render(gameObjects);
     }
 
     @Override
@@ -154,9 +295,9 @@ public class GameDesktopLauncher implements ApplicationListener {
 
     @Override
     public void dispose() {
-        // dispose of all the native resources (classes which implement com.badlogic.gdx.utils.Disposable)
-        greenTreeTexture.dispose();
-        blueTankTexture.dispose();
+        for (GameObject gameObject : gameObjects) {
+            gameObject.dispose();
+        }
         level.dispose();
         batch.dispose();
     }
