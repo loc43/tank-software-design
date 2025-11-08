@@ -22,6 +22,95 @@ import static com.badlogic.gdx.graphics.GL20.GL_COLOR_BUFFER_BIT;
 import static com.badlogic.gdx.math.MathUtils.isEqual;
 import static ru.mipt.bit.platformer.util.GdxGameUtils.*;
 
+
+interface Command {
+    void execute();
+    boolean canExecute();
+}
+
+
+class MoveCommand implements Command {
+    private final GameObject gameObject;
+    private final Direction direction;
+    private final List<GameObject> allObjects;
+    private final TiledMapTileLayer groundLayer;
+
+    public MoveCommand(GameObject gameObject, Direction direction, List<GameObject> allObjects, TiledMapTileLayer groundLayer) {
+        this.gameObject = gameObject;
+        this.direction = direction;
+        this.allObjects = allObjects;
+        this.groundLayer = groundLayer;
+    }
+
+    @Override
+    public void execute() {
+        if (!canExecute()) return;
+
+        GridPoint2 offset = direction.getMovementOffset();
+        GridPoint2 targetPosition = new GridPoint2(
+            gameObject.getCoordinates().x + offset.x,
+            gameObject.getCoordinates().y + offset.y
+        );
+
+        if (gameObject instanceof Player) {
+            Player player = (Player) gameObject;
+            player.setDestinationCoordinates(targetPosition);
+            player.setMovementProgress(0f);
+            player.setRotation(direction);
+        }
+        else if (gameObject instanceof AITank) {
+            AITank aiTank = (AITank) gameObject;
+            aiTank.setDestinationCoordinates(targetPosition);
+            aiTank.setMovementProgress(0f);
+            aiTank.setRotation(direction);
+        }
+    }
+
+    @Override
+    public boolean canExecute() {
+        if (gameObject instanceof Player) {
+            Player player = (Player) gameObject;
+            if (!isEqual(player.getMovementProgress(), 1f)) return false;
+        } else if (gameObject instanceof AITank) {
+            AITank aiTank = (AITank) gameObject;
+            if (!isEqual(aiTank.getMovementProgress(), 1f)) return false;
+        }
+
+        GridPoint2 offset = direction.getMovementOffset();
+        GridPoint2 targetPosition = new GridPoint2(
+            gameObject.getCoordinates().x + offset.x,
+            gameObject.getCoordinates().y + offset.y
+        );
+
+        if (targetPosition.x < 0 || targetPosition.x >= groundLayer.getWidth() ||
+            targetPosition.y < 0 || targetPosition.y >= groundLayer.getHeight()) {
+            return false;
+        }
+
+        for (GameObject obj : allObjects) {
+            if (obj == gameObject) continue; 
+            
+            if (obj.getCoordinates().equals(targetPosition)) {
+                return false;
+            }
+            
+            if (obj instanceof Player) {
+                Player p = (Player) obj;
+                if (p.getDestinationCoordinates().equals(targetPosition) && !isEqual(p.getMovementProgress(), 1f)) {
+                    return false;
+                }
+            } else if (obj instanceof AITank) {
+                AITank ai = (AITank) obj;
+                if (ai.getDestinationCoordinates().equals(targetPosition) && !isEqual(ai.getMovementProgress(), 1f)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+}
+
 interface GameObject {
     TextureRegion getGraphics();
     Rectangle getRectangle();
@@ -75,6 +164,62 @@ class Player implements GameObject {
     public void setMovementProgress(float movementProgress) { this.movementProgress = movementProgress; }
     public Direction getRotationDirection() { return rotation; }
     public void setRotation(Direction rotation) { this.rotation = rotation; }
+}
+
+class AITank implements GameObject {
+    private Texture texture;
+    private TextureRegion graphics;
+    private Rectangle rectangle;
+    private GridPoint2 coordinates;
+    private GridPoint2 destinationCoordinates;
+    private float movementProgress = 1f;
+    private Direction rotation;
+    private Random random = new Random();
+    private float timeSinceLastMove = 0f;
+
+    public AITank(String texturePath, GridPoint2 startPosition) {
+        this.texture = new Texture(texturePath);
+        this.graphics = new TextureRegion(texture);
+        this.rectangle = createBoundingRectangle(graphics);
+        this.coordinates = new GridPoint2(startPosition);
+        this.destinationCoordinates = new GridPoint2(startPosition);
+        this.rotation = Direction.RIGHT;
+    }
+
+    @Override
+    public TextureRegion getGraphics() { return graphics; }
+    @Override
+    public Rectangle getRectangle() { return rectangle; }
+    @Override
+    public GridPoint2 getCoordinates() { return coordinates; }
+    @Override
+    public float getRotation() { return rotation.getRotation(); }
+    @Override
+    public void update(float deltaTime) {
+        timeSinceLastMove += deltaTime;
+    }
+    @Override
+    public void dispose() { if (texture != null) texture.dispose(); }
+
+    public GridPoint2 getDestinationCoordinates() { return destinationCoordinates; }
+    public void setDestinationCoordinates(GridPoint2 destinationCoordinates) { this.destinationCoordinates = destinationCoordinates; }
+    public float getMovementProgress() { return movementProgress; }
+    public void setMovementProgress(float movementProgress) { this.movementProgress = movementProgress; }
+    public Direction getRotationDirection() { return rotation; }
+    public void setRotation(Direction rotation) { this.rotation = rotation; }
+    
+    public boolean shouldMakeDecision() {
+        return timeSinceLastMove > 1f;
+    }
+    
+    public void resetDecisionTimer() {
+        timeSinceLastMove = 0f;
+    }
+    
+    public Direction getRandomDirection() {
+        Direction[] directions = Direction.values();
+        return directions[random.nextInt(directions.length)];
+    }
 }
 
 class Obstacle implements GameObject {
@@ -145,7 +290,10 @@ class PlayerController {
         if (isEqual(player.getMovementProgress(), 1f)) {
             Direction direction = getMovementDirection();
             if (direction != null) {
-                tryMove(direction);
+                Command moveCommand = new MoveCommand(player, direction, allObjects, groundLayer);
+                if (moveCommand.canExecute()) {
+                    moveCommand.execute();
+                }
             }
         }
     }
@@ -165,7 +313,6 @@ class PlayerController {
             player.getCoordinates().y + offset.y
         );
         
-        // Здесь можно добавить проверку коллизий
         player.setDestinationCoordinates(targetPosition);
         player.setMovementProgress(0f);
         player.setRotation(direction);
@@ -211,23 +358,61 @@ class GameRenderer {
     }
 }
 
+class AIController {
+    private final AITank tank;
+    private final List<GameObject> allObjects;
+    private final TiledMapTileLayer groundLayer;
+
+    public AIController(AITank tank, List<GameObject> allObjects, TiledMapTileLayer groundLayer) {
+        this.tank = tank;
+        this.allObjects = allObjects;
+        this.groundLayer = groundLayer;
+    }
+
+    public void update(float deltaTime) {
+        tank.update(deltaTime);
+
+        if (tank.shouldMakeDecision()) {
+            makeRandomMove();
+            tank.resetDecisionTimer();
+        }
+    }
+
+    private void makeRandomMove() {
+        for (int i = 0; i < 4; i++) {
+            Direction direction = tank.getRandomDirection();
+            Command moveCommand = new MoveCommand(tank, direction, allObjects, groundLayer);
+            if (moveCommand.canExecute()) {
+                moveCommand.execute();
+                break;
+            }
+        }
+    }
+}
+
+
 public class GameDesktopLauncher implements ApplicationListener {
 
     private static final float MOVEMENT_SPEED = 0.4f;
     private static final String LEVEL_PATH = "level.tmx";
     private static final String PLAYER_TEXTURE = "images/tank_blue.png";
+    private static final String AITANK_TEXTURE = "images/tank_blue.png";
     private static final String OBSTACLE_TEXTURE = "images/greenTree.png";
+    private static final int NUM_AI_TANKS = 3;
 
     private Batch batch;
     private TiledMap level;
     private MapRenderer levelRenderer;
     private TileMovement tileMovement;
+    private TiledMapTileLayer groundLayer;
 
     private Player player;
-    private java.util.List<GameObject> gameObjects;
+    private List<AITank> aiTanks;
+    private List<GameObject> gameObjects;
     private InputHandler inputHandler;
     private PlayerController playerController;
     private GameRenderer gameRenderer;
+    private List<AIController> aiControllers;
 
     @Override
     public void create() {
@@ -243,35 +428,41 @@ public class GameDesktopLauncher implements ApplicationListener {
         TiledMapTileLayer groundLayer = getSingleLayer(level);
         tileMovement = new TileMovement(groundLayer, Interpolation.smooth);
     }
-    private void positionAllObjects() {
-        TiledMapTileLayer groundLayer = getSingleLayer(level);
-        for (GameObject obj : gameObjects) {
-            moveRectangleAtTileCenter(groundLayer, obj.getRectangle(), obj.getCoordinates());
-        }
-    }
-    
-    private void initializeGameObjectsRandom() {
-        gameObjects = new java.util.ArrayList<>();
-        Random random = new Random(); 
+    private void initializeGameObjects() {
+        gameObjects = new ArrayList<>();
+        aiTanks = new ArrayList<>();
+        aiControllers = new ArrayList<>();
+
+        Random random = new Random();
         
-        int playerX = random.nextInt(8); 
-        int playerY = random.nextInt(6);
-        player = new Player(PLAYER_TEXTURE, new GridPoint2(playerX, playerY));
+        player = new Player(PLAYER_TEXTURE, new GridPoint2(2, 2));
         gameObjects.add(player);
-        
-        for (int x = 0; x < 10; x++) { 
-            for (int y = 0; y < 8; y++) { 
-                if (random.nextFloat() < 0.5f) {
-                    if (x != playerX || y != playerY) {
-                        Obstacle tree = new Obstacle(OBSTACLE_TEXTURE, new GridPoint2(x, y));
-                        gameObjects.add(tree);
+        for (int i = 0; i < NUM_AI_TANKS; i++) {
+            int x, y;
+            boolean positionOk;
+            int attempts = 0;
+            
+            do {
+                positionOk = true;
+                x = random.nextInt(8);
+                y = random.nextInt(6);
+                
+                for (GameObject obj : gameObjects) {
+                    if (obj.getCoordinates().x == x && obj.getCoordinates().y == y) {
+                        positionOk = false;
+                        break;
                     }
                 }
+                attempts++;
+            } while (!positionOk && attempts < 20);
+            
+            if (positionOk) {
+                AITank aiTank = new AITank(AI_TANK_TEXTURE, new GridPoint2(x, y));
+                aiTanks.add(aiTank);
+                gameObjects.add(aiTank);
             }
         }
-        positionAllObjects();
-    }
-
+        
     private void initializeGameObjectsFromFile() {
         gameObjects = new ArrayList<>();
         List<String> levelLines = new ArrayList<>();
@@ -303,22 +494,44 @@ public class GameDesktopLauncher implements ApplicationListener {
             }
             positionAllObjects();
         }
-    
+        
+        gameObjects.add(new Obstacle(OBSTACLE_TEXTURE, new GridPoint2(5, 5)));
+        gameObjects.add(new Obstacle(OBSTACLE_TEXTURE, new GridPoint2(7, 3)));
+
+        positionAllObjects();
+    }
+
+    private void positionAllObjects() {
+        for (GameObject obj : gameObjects) {
+            moveRectangleAtTileCenter(groundLayer, obj.getRectangle(), obj.getCoordinates());
+        }
+    }
+
     private void initializeSystems() {
         inputHandler = new KeyboardInputHandler();
-        playerController = new PlayerController(player, inputHandler, tileMovement, MOVEMENT_SPEED);
+        playerController = new PlayerController(player, inputHandler, tileMovement, 
+                                              MOVEMENT_SPEED, gameObjects, groundLayer);
         gameRenderer = new GameRenderer(batch, levelRenderer);
+        
+        for (AITank aiTank : aiTanks) {
+            AIController aiController = new AIController(aiTank, gameObjects, groundLayer);
+            aiControllers.add(aiController);
+        }
     }
 
     @Override
     public void render() {
-        // clear the screen
         Gdx.gl.glClearColor(0f, 0f, 0.2f, 1f);
         Gdx.gl.glClear(GL_COLOR_BUFFER_BIT);
 
         float deltaTime = Gdx.graphics.getDeltaTime();
         
         playerController.update(deltaTime);
+        
+        for (AIController aiController : aiControllers) {
+            aiController.update(deltaTime);
+            updateTankMovement(aiController.tank, deltaTime);
+        }
 
         gameRenderer.render(gameObjects);
     }
