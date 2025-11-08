@@ -165,7 +165,6 @@ class PlayerController {
             player.getCoordinates().y + offset.y
         );
         
-        // Здесь можно добавить проверку коллизий
         player.setDestinationCoordinates(targetPosition);
         player.setMovementProgress(0f);
         player.setRotation(direction);
