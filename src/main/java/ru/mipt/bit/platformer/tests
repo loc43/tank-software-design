@@ -1,0 +1,126 @@
+package ru.mipt.bit.platformer;
+
+import com.badlogic.gdx.math.GridPoint2;
+import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+class TankMovementTest {
+    private Player player;
+    private AITank aiTank;
+    private List<GameObject> gameObjects;
+    private TiledMapTileLayer groundLayer;
+
+    @BeforeEach
+    void setUp() {
+        player = mock(Player.class);
+        aiTank = mock(AITank.class);
+        gameObjects = new ArrayList<>();
+        groundLayer = mock(TiledMapTileLayer.class);
+        
+        when(groundLayer.getWidth()).thenReturn(10);
+        when(groundLayer.getHeight()).thenReturn(8);
+    }
+
+    @Test
+    void playerMoveCommand_ShouldMoveToCorrectPosition() {
+        when(player.getCoordinates()).thenReturn(new GridPoint2(3, 3));
+        when(player.getMovementProgress()).thenReturn(1f);
+        
+        MoveCommand command = new MoveCommand(player, Direction.RIGHT, gameObjects, groundLayer);
+        
+        assertTrue(command.canExecute());
+        command.execute();
+        
+        verify(player).setDestinationCoordinates(new GridPoint2(4, 3));
+        verify(player).setMovementProgress(0f);
+        verify(player).setRotation(Direction.RIGHT);
+    }
+
+    @Test
+    void aiTankMoveCommand_ShouldMoveToCorrectPosition() {
+        when(aiTank.getCoordinates()).thenReturn(new GridPoint2(5, 5));
+        when(aiTank.getMovementProgress()).thenReturn(1f);
+        
+        MoveCommand command = new MoveCommand(aiTank, Direction.UP, gameObjects, groundLayer);
+        
+        assertTrue(command.canExecute());
+        command.execute();
+        
+        verify(aiTank).setDestinationCoordinates(new GridPoint2(5, 6));
+        verify(aiTank).setMovementProgress(0f);
+        verify(aiTank).setRotation(Direction.UP);
+    }
+
+    @Test
+    void playerCannotMove_WhenAnotherTankInTheWay() {
+        when(player.getCoordinates()).thenReturn(new GridPoint2(2, 2));
+        when(player.getMovementProgress()).thenReturn(1f);
+        
+        AITank blockingTank = mock(AITank.class);
+        when(blockingTank.getCoordinates()).thenReturn(new GridPoint2(2, 3));
+        gameObjects.add(blockingTank);
+        
+        MoveCommand command = new MoveCommand(player, Direction.UP, gameObjects, groundLayer);
+        
+        assertFalse(command.canExecute());
+    }
+
+    @Test
+    void aiTankCannotMove_WhenPlayerInTheWay() {
+        when(aiTank.getCoordinates()).thenReturn(new GridPoint2(4, 4));
+        when(aiTank.getMovementProgress()).thenReturn(1f);
+        
+        when(player.getCoordinates()).thenReturn(new GridPoint2(4, 5));
+        gameObjects.add(player);
+        
+        MoveCommand command = new MoveCommand(aiTank, Direction.UP, gameObjects, groundLayer);
+        
+        assertFalse(command.canExecute());
+    }
+
+    @Test
+    void playerCannotMove_WhenAtMapBoundary() {
+        when(player.getCoordinates()).thenReturn(new GridPoint2(0, 0));
+        when(player.getMovementProgress()).thenReturn(1f);
+        
+        MoveCommand leftCommand = new MoveCommand(player, Direction.LEFT, gameObjects, groundLayer);
+        MoveCommand downCommand = new MoveCommand(player, Direction.DOWN, gameObjects, groundLayer);
+        
+        assertFalse(leftCommand.canExecute());
+        assertFalse(downCommand.canExecute());
+    }
+
+    @Test
+    void aiTankCannotMove_WhenAtMapBoundary() {
+        when(aiTank.getCoordinates()).thenReturn(new GridPoint2(9, 7));
+        when(aiTank.getMovementProgress()).thenReturn(1f);
+        
+        MoveCommand rightCommand = new MoveCommand(aiTank, Direction.RIGHT, gameObjects, groundLayer);
+        MoveCommand upCommand = new MoveCommand(aiTank, Direction.UP, gameObjects, groundLayer);
+        
+        assertFalse(rightCommand.canExecute());
+        assertFalse(upCommand.canExecute());
+    }
+
+    @Test
+    void aiTankShouldMakeDecision_OnlyWhenTimePassed() {
+        AITank tank = new AITank("", new GridPoint2(3, 3));
+        
+        assertFalse(tank.shouldMakeDecision());
+        
+        tank.setMovementProgress(0.5f);
+        tank.update(1.5f);
+        assertFalse(tank.shouldMakeDecision());
+        
+        tank.setMovementProgress(1f);
+        tank.update(1.5f);
+        assertTrue(tank.shouldMakeDecision());
+    }
+}
