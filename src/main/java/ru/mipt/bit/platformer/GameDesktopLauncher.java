@@ -22,6 +22,9 @@ import static com.badlogic.gdx.graphics.GL20.GL_COLOR_BUFFER_BIT;
 import static com.badlogic.gdx.math.MathUtils.isEqual;
 import static ru.mipt.bit.platformer.util.GdxGameUtils.*;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 
 interface Command {
     void execute();
@@ -273,12 +276,16 @@ class PlayerController {
     private final InputHandler inputHandler;
     private final TileMovement tileMovement;
     private final float movementSpeed;
+    private final List<GameObject> allObjects; 
+    private final TiledMapTileLayer groundLayer; 
 
     public PlayerController(Player player, InputHandler inputHandler, TileMovement tileMovement, float movementSpeed) {
         this.player = player;
         this.inputHandler = inputHandler;
         this.tileMovement = tileMovement;
         this.movementSpeed = movementSpeed;
+        this.allObjects = allObjects;
+        this.groundLayer = groundLayer;
     }
 
     public void update(float deltaTime) {
@@ -457,7 +464,7 @@ public class GameDesktopLauncher implements ApplicationListener {
             } while (!positionOk && attempts < 20);
             
             if (positionOk) {
-                AITank aiTank = new AITank(AI_TANK_TEXTURE, new GridPoint2(x, y));
+                AITank aiTank = new AITank(AITANK_TEXTURE, new GridPoint2(x, y));
                 aiTanks.add(aiTank);
                 gameObjects.add(aiTank);
             }
@@ -516,6 +523,22 @@ public class GameDesktopLauncher implements ApplicationListener {
         for (AITank aiTank : aiTanks) {
             AIController aiController = new AIController(aiTank, gameObjects, groundLayer);
             aiControllers.add(aiController);
+        }
+    }
+
+    private void updateTankMovement(AITank tank, float deltaTime) {
+        float progress = continueProgress(tank.getMovementProgress(), deltaTime, MOVEMENT_SPEED);
+        tank.setMovementProgress(progress);
+
+        tileMovement.moveRectangleBetweenTileCenters(
+            tank.getRectangle(),
+            tank.getCoordinates(),
+            tank.getDestinationCoordinates(),
+            progress
+        );
+
+        if (isEqual(progress, 1f)) {
+            tank.getCoordinates().set(tank.getDestinationCoordinates());
         }
     }
 
