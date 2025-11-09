@@ -22,6 +22,10 @@ import static com.badlogic.gdx.graphics.GL20.GL_COLOR_BUFFER_BIT;
 import static com.badlogic.gdx.math.MathUtils.isEqual;
 import static ru.mipt.bit.platformer.util.GdxGameUtils.*;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
 
 interface Command {
     void execute();
@@ -111,6 +115,88 @@ class MoveCommand implements Command {
     }
 }
 
+class ToggleHealthBarsCommand implements Command {
+    @Override
+    public void execute() {
+        HealthBarDecorator.toggleHealthBars();
+    }
+    
+    @Override
+    public boolean canExecute() {
+        return true;
+    }
+}
+
+interface Health {
+    int getHealth();
+    int getMaxHealth();
+    void setHealth(int health);
+    boolean isAlive();
+}
+
+class HealthBarDecorator implements GameObject {
+    private GameObject decorated;
+    private Health healthObject;
+    private static boolean showHealthBars = false;
+    
+    public HealthBarDecorator(GameObject decorated, Health healthObject) {
+        this.decorated = decorated;
+        this.healthObject = healthObject;
+    }
+    
+    public static void toggleHealthBars() {
+        showHealthBars = !showHealthBars;
+    }
+    
+    @Override
+    public TextureRegion getGraphics() {
+        return decorated.getGraphics();
+    }
+    
+    @Override
+    public Rectangle getRectangle() {
+        return decorated.getRectangle();
+    }
+    
+    @Override
+    public GridPoint2 getCoordinates() {
+        return decorated.getCoordinates();
+    }
+    
+    @Override
+    public float getRotation() {
+        return decorated.getRotation();
+    }
+    
+    @Override
+    public void update(float deltaTime) {
+        decorated.update(deltaTime);
+    }
+    
+    @Override
+    public void dispose() {
+        decorated.dispose();
+    }
+    
+    public void renderHealthBar(Batch batch) {
+        if (!showHealthBars || !healthObject.isAlive()) return;
+        
+        Rectangle rect = getRectangle();
+        float barWidth = rect.width;
+        float barHeight = 5f;
+        float barX = rect.x;
+        float barY = rect.y + rect.height + 2f;
+        batch.setColor(1, 0, 0, 1);
+        batch.draw(getGraphics().getTexture(), barX, barY, barWidth, barHeight);
+        
+        float healthPercent = (float) healthObject.getHealth() / healthObject.getMaxHealth();
+        batch.setColor(0, 1, 0, 1);
+        batch.draw(getGraphics().getTexture(), barX, barY, barWidth * healthPercent, barHeight);
+        
+        batch.setColor(1, 1, 1, 1);
+    }
+}
+
 interface GameObject {
     TextureRegion getGraphics();
     Rectangle getRectangle();
@@ -127,7 +213,7 @@ interface InputHandler {
     boolean isMoveRight();
 }
 
-class Player implements GameObject {
+class Player implements GameObject, Health {
     private Texture texture;
     private TextureRegion graphics;
     private Rectangle rectangle;
@@ -135,6 +221,8 @@ class Player implements GameObject {
     private GridPoint2 destinationCoordinates;
     private float movementProgress = 1f;
     private Direction rotation;
+    private int health;
+    private int maxHealth;
 
     public Player(String texturePath, GridPoint2 startPosition) {
         this.texture = new Texture(texturePath);
@@ -143,6 +231,8 @@ class Player implements GameObject {
         this.coordinates = new GridPoint2(startPosition);
         this.destinationCoordinates = new GridPoint2(startPosition);
         this.rotation = Direction.RIGHT;
+        this.maxHealth = 100;
+        this.health = 80 + random.nextInt(21); 
     }
 
     @Override
@@ -164,9 +254,18 @@ class Player implements GameObject {
     public void setMovementProgress(float movementProgress) { this.movementProgress = movementProgress; }
     public Direction getRotationDirection() { return rotation; }
     public void setRotation(Direction rotation) { this.rotation = rotation; }
+
+    @Override
+    public int getHealth() { return health; }
+    @Override
+    public int getMaxHealth() { return maxHealth; }
+    @Override
+    public void setHealth(int health) { this.health = health; }
+    @Override
+    public boolean isAlive() { return health > 0; }
 }
 
-class AITank implements GameObject {
+class AITank implements GameObject, Health {
     private Texture texture;
     private TextureRegion graphics;
     private Rectangle rectangle;
@@ -176,6 +275,8 @@ class AITank implements GameObject {
     private Direction rotation;
     private Random random = new Random();
     private float timeSinceLastMove = 0f;
+    private int health;
+    private int maxHealth;
 
     public AITank(String texturePath, GridPoint2 startPosition) {
         this.texture = new Texture(texturePath);
@@ -184,6 +285,8 @@ class AITank implements GameObject {
         this.coordinates = new GridPoint2(startPosition);
         this.destinationCoordinates = new GridPoint2(startPosition);
         this.rotation = Direction.RIGHT;
+        this.maxHealth = 100;
+        this.health = 80 + random.nextInt(21);
     }
 
     @Override
@@ -220,6 +323,15 @@ class AITank implements GameObject {
         Direction[] directions = Direction.values();
         return directions[random.nextInt(directions.length)];
     }
+
+    @Override
+    public int getHealth() { return health; }
+    @Override
+    public int getMaxHealth() { return maxHealth; }
+    @Override
+    public void setHealth(int health) { this.health = health; }
+    @Override
+    public boolean isAlive() { return health > 0; }
 }
 
 class Obstacle implements GameObject {
@@ -273,6 +385,8 @@ class PlayerController {
     private final InputHandler inputHandler;
     private final TileMovement tileMovement;
     private final float movementSpeed;
+    private final List<GameObject> allObjects;
+    private final TiledMapTileLayer groundLayer;
 
     public PlayerController(Player player, InputHandler inputHandler, TileMovement tileMovement, float movementSpeed) {
         this.player = player;
@@ -339,25 +453,6 @@ class PlayerController {
     }
 }
 
-class GameRenderer {
-    private final Batch batch;
-    private final MapRenderer levelRenderer;
-
-    public GameRenderer(Batch batch, MapRenderer levelRenderer) {
-        this.batch = batch;
-        this.levelRenderer = levelRenderer;
-    }
-
-    public void render(java.util.List<GameObject> gameObjects) {
-        levelRenderer.render();
-        batch.begin();
-        for (GameObject gameObject : gameObjects) {
-            drawTextureRegionUnscaled(batch, gameObject.getGraphics(), gameObject.getRectangle(), gameObject.getRotation());
-        }
-        batch.end();
-    }
-}
-
 class AIController {
     private final AITank tank;
     private final List<GameObject> allObjects;
@@ -390,6 +485,30 @@ class AIController {
     }
 }
 
+class GameRenderer {
+    private final Batch batch;
+    private final MapRenderer levelRenderer;
+
+    public GameRenderer(Batch batch, MapRenderer levelRenderer) {
+        this.batch = batch;
+        this.levelRenderer = levelRenderer;
+    }
+
+    public void render(java.util.List<GameObject> gameObjects) {
+        levelRenderer.render();
+        batch.begin();
+        for (GameObject gameObject : gameObjects) {
+            drawTextureRegionUnscaled(batch, gameObject.getGraphics(), gameObject.getRectangle(), gameObject.getRotation());
+        }
+
+        for (GameObject gameObject : gameObjects) {
+            if (gameObject instanceof HealthBarDecorator) {
+                ((HealthBarDecorator) gameObject).renderHealthBar(batch);
+            }
+        }
+        batch.end();
+    }
+}
 
 public class GameDesktopLauncher implements ApplicationListener {
 
@@ -413,6 +532,8 @@ public class GameDesktopLauncher implements ApplicationListener {
     private PlayerController playerController;
     private GameRenderer gameRenderer;
     private List<AIController> aiControllers;
+    private ToggleHealthBarsCommand toggleHealthBarsCommand;
+    private boolean lKeyPressed = false;
 
     @Override
     public void create() {
@@ -435,8 +556,10 @@ public class GameDesktopLauncher implements ApplicationListener {
 
         Random random = new Random();
         
-        player = new Player(PLAYER_TEXTURE, new GridPoint2(2, 2));
+        Player playerObj = new Player(PLAYER_TEXTURE, new GridPoint2(2, 2));
+        player = new HealthBarDecorator(playerObj, playerObj);
         gameObjects.add(player);
+        
         for (int i = 0; i < NUM_AI_TANKS; i++) {
             int x, y;
             boolean positionOk;
@@ -458,6 +581,7 @@ public class GameDesktopLauncher implements ApplicationListener {
             
             if (positionOk) {
                 AITank aiTank = new AITank(AI_TANK_TEXTURE, new GridPoint2(x, y));
+                HealthBarDecorator decoratedTank = new HealthBarDecorator(aiTank, aiTank);
                 aiTanks.add(aiTank);
                 gameObjects.add(aiTank);
             }
@@ -512,6 +636,7 @@ public class GameDesktopLauncher implements ApplicationListener {
         playerController = new PlayerController(player, inputHandler, tileMovement, 
                                               MOVEMENT_SPEED, gameObjects, groundLayer);
         gameRenderer = new GameRenderer(batch, levelRenderer);
+        toggleHealthBarsCommand = new ToggleHealthBarsCommand();
         
         for (AITank aiTank : aiTanks) {
             AIController aiController = new AIController(aiTank, gameObjects, groundLayer);
@@ -525,6 +650,15 @@ public class GameDesktopLauncher implements ApplicationListener {
         Gdx.gl.glClear(GL_COLOR_BUFFER_BIT);
 
         float deltaTime = Gdx.graphics.getDeltaTime();
+
+        if (Gdx.input.isKeyPressed(L)) {
+            if (!lKeyPressed && toggleHealthBarsCommand.canExecute()) {
+                toggleHealthBarsCommand.execute();
+                lKeyPressed = true;
+            }
+        } else {
+            lKeyPressed = false;
+        }
         
         playerController.update(deltaTime);
         
@@ -534,6 +668,21 @@ public class GameDesktopLauncher implements ApplicationListener {
         }
 
         gameRenderer.render(gameObjects);
+    }
+    private void updateTankMovement(AITank tank, float deltaTime) {
+        float progress = continueProgress(tank.getMovementProgress(), deltaTime, MOVEMENT_SPEED);
+        tank.setMovementProgress(progress);
+
+        tileMovement.moveRectangleBetweenTileCenters(
+            tank.getRectangle(),
+            tank.getCoordinates(),
+            tank.getDestinationCoordinates(),
+            progress
+        );
+
+        if (isEqual(progress, 1f)) {
+            tank.getCoordinates().set(tank.getDestinationCoordinates());
+        }
     }
 
     @Override
