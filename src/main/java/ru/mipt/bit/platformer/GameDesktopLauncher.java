@@ -22,6 +22,10 @@ import static com.badlogic.gdx.graphics.GL20.GL_COLOR_BUFFER_BIT;
 import static com.badlogic.gdx.math.MathUtils.isEqual;
 import static ru.mipt.bit.platformer.util.GdxGameUtils.*;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
 interface GameObject {
     TextureRegion getGraphics();
     Rectangle getRectangle();
@@ -232,7 +236,7 @@ public class GameDesktopLauncher implements ApplicationListener {
     public void create() {
         batch = new SpriteBatch();
         initializeLevel();
-        initializeGameObjects();
+        initializeGameObjectsRandom();
         initializeSystems();
     }
 
