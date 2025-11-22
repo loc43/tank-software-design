@@ -7,16 +7,18 @@ import java.util.List;
 
 import static ru.mipt.bit.platformer.util.GdxGameUtils.drawTextureRegionUnscaled;
 
-public class GameRenderer {
+public class GameRenderer implements GameLevelListener {
     private final Batch batch;
     private final MapRenderer levelRenderer;
+    private List<GameObject> gameObjects;
 
-    public GameRenderer(Batch batch, MapRenderer levelRenderer) {
+    public GameRenderer(Batch batch, MapRenderer levelRenderer, List<GameObject> gameObjects) {
         this.batch = batch;
         this.levelRenderer = levelRenderer;
+        this.gameObjects = gameObjects;
     }
 
-    public void render(List<GameObject> gameObjects) {
+    public void render() {
         levelRenderer.render();
         batch.begin();
         for (GameObject gameObject : gameObjects) {
@@ -29,5 +31,15 @@ public class GameRenderer {
             }
         }
         batch.end();
+    }
+
+    @Override
+    public void objectAdded(GameObject gameObject) {
+        gameObjects.add(gameObject);
+    }
+
+    @Override
+    public void objectRemoved(GameObject gameObject) {
+        gameObjects.remove(gameObject);
     }
 }
