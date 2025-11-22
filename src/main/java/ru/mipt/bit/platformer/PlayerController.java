@@ -9,20 +9,19 @@ import static ru.mipt.bit.platformer.util.GdxGameUtils.isEqual;
 
 public class PlayerController {
     private final Player player;
-    private final InputHandler inputHandler;
+    private final KeyboardInputHandler inputHandler;
     private final TileMovement tileMovement;
     private final float movementSpeed;
-    private final List<GameObject> allObjects;
-    private final TiledMapTileLayer groundLayer;
+    private final GameLevel gameLevel;
+    private boolean spacePressed = false;
 
-    public PlayerController(Player player, InputHandler inputHandler, TileMovement tileMovement, 
-                          float movementSpeed, List<GameObject> allObjects, TiledMapTileLayer groundLayer) {
+    public PlayerController(Player player, KeyboardInputHandler inputHandler, TileMovement tileMovement, 
+                          float movementSpeed, GameLevel gameLevel) {
         this.player = player;
         this.inputHandler = inputHandler;
         this.tileMovement = tileMovement;
         this.movementSpeed = movementSpeed;
-        this.allObjects = allObjects;
-        this.groundLayer = groundLayer;
+        this.gameLevel = gameLevel;
     }
 
     public void update(float deltaTime) {
@@ -34,11 +33,23 @@ public class PlayerController {
         if (isEqual(player.getMovementProgress(), 1f)) {
             Direction direction = getMovementDirection();
             if (direction != null) {
-                Command moveCommand = new MoveCommand(player, direction, allObjects, groundLayer);
+                Command moveCommand = new MoveCommand(player, direction, gameLevel.getGameObjects(), gameLevel.getGroundLayer());
                 if (moveCommand.canExecute()) {
                     moveCommand.execute();
                 }
             }
+        }
+        
+        if (inputHandler.isShoot()) {
+            if (!spacePressed) {
+                Command shootCommand = new ShootCommand(player, gameLevel);
+                if (shootCommand.canExecute()) {
+                    shootCommand.execute();
+                }
+                spacePressed = true;
+            }
+        } else {
+            spacePressed = false;
         }
     }
 
