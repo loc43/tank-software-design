@@ -22,6 +22,10 @@ import static com.badlogic.gdx.graphics.GL20.GL_COLOR_BUFFER_BIT;
 import static com.badlogic.gdx.math.MathUtils.isEqual;
 import static ru.mipt.bit.platformer.util.GdxGameUtils.*;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
 interface GameObject {
     TextureRegion getGraphics();
     Rectangle getRectangle();
@@ -165,7 +169,6 @@ class PlayerController {
             player.getCoordinates().y + offset.y
         );
         
-        // Здесь можно добавить проверку коллизий
         player.setDestinationCoordinates(targetPosition);
         player.setMovementProgress(0f);
         player.setRotation(direction);
@@ -233,7 +236,7 @@ public class GameDesktopLauncher implements ApplicationListener {
     public void create() {
         batch = new SpriteBatch();
         initializeLevel();
-        initializeGameObjects();
+        initializeGameObjectsRandom();
         initializeSystems();
     }
 
@@ -243,22 +246,67 @@ public class GameDesktopLauncher implements ApplicationListener {
         TiledMapTileLayer groundLayer = getSingleLayer(level);
         tileMovement = new TileMovement(groundLayer, Interpolation.smooth);
     }
-
-    private void initializeGameObjects() {
-        gameObjects = new java.util.ArrayList<>();
-        
-        player = new Player(PLAYER_TEXTURE, new GridPoint2(1, 1));
-        gameObjects.add(player);
-        
-        Obstacle obstacle = new Obstacle(OBSTACLE_TEXTURE, new GridPoint2(1, 3));
-        gameObjects.add(obstacle);
-        
+    private void positionAllObjects() {
         TiledMapTileLayer groundLayer = getSingleLayer(level);
-        for (GameObject gameObject : gameObjects) {
-            moveRectangleAtTileCenter(groundLayer, gameObject.getRectangle(), gameObject.getCoordinates());
+        for (GameObject obj : gameObjects) {
+            moveRectangleAtTileCenter(groundLayer, obj.getRectangle(), obj.getCoordinates());
         }
     }
+    
+    private void initializeGameObjectsRandom() {
+        gameObjects = new java.util.ArrayList<>();
+        Random random = new Random(); 
+        
+        int playerX = random.nextInt(8); 
+        int playerY = random.nextInt(6);
+        player = new Player(PLAYER_TEXTURE, new GridPoint2(playerX, playerY));
+        gameObjects.add(player);
+        
+        for (int x = 0; x < 10; x++) { 
+            for (int y = 0; y < 8; y++) { 
+                if (random.nextFloat() < 0.5f) {
+                    if (x != playerX || y != playerY) {
+                        Obstacle tree = new Obstacle(OBSTACLE_TEXTURE, new GridPoint2(x, y));
+                        gameObjects.add(tree);
+                    }
+                }
+            }
+        }
+        positionAllObjects();
+    }
 
+    private void initializeGameObjectsFromFile() {
+        gameObjects = new ArrayList<>();
+        List<String> levelLines = new ArrayList<>();
+        
+        BufferedReader reader = Files.newBufferedReader(Paths.get(LEVEL_FILE_PATH)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                levelLines.add(line);
+            }
+        }
+        
+        for (int y = 0; y < levelLines.size(); y++) {
+            String line = levelLines.get(y);
+            for (int x = 0; x < line.length(); x++) {
+                char cell = line.charAt(x);
+                
+                switch (cell) {
+                    case 'T':
+                        Obstacle obstacle = new Obstacle(OBSTACLE_TEXTURE, new GridPoint2(x, levelLines.size() - 1 - y));
+                        gameObjects.add(obstacle);
+                        break;
+                    case 'X':
+                        player = new Player(PLAYER_TEXTURE, new GridPoint2(x, levelLines.size() - 1 - y));
+                        gameObjects.add(player);
+                        break;
+                    case '_':
+                        break;
+                }
+            }
+            positionAllObjects();
+        }
+    
     private void initializeSystems() {
         inputHandler = new KeyboardInputHandler();
         playerController = new PlayerController(player, inputHandler, tileMovement, MOVEMENT_SPEED);
