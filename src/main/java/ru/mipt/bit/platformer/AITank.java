@@ -67,6 +67,10 @@ public class AITank implements GameObject, Health {
         Direction[] directions = Direction.values();
         return directions[random.nextInt(directions.length)];
     }
+    
+    public boolean shouldShoot() {
+        return random.nextFloat() < 0.3f;
+    }
 
     @Override
     public int getHealth() { return health; }
