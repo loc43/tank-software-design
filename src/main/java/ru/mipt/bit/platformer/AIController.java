@@ -12,6 +12,10 @@ public class AIController {
         this.gameLevel = gameLevel;
     }
 
+    public AITank getTank() {
+        return tank;
+    }
+
     public void update(float deltaTime) {
         tank.update(deltaTime);
 
