@@ -5,20 +5,25 @@ import java.util.List;
 
 public class AIController {
     private final AITank tank;
-    private final List<GameObject> allObjects;
-    private final TiledMapTileLayer groundLayer;
+    private final GameLevel gameLevel;
 
-    public AIController(AITank tank, List<GameObject> allObjects, TiledMapTileLayer groundLayer) {
+    public AIController(AITank tank, GameLevel gameLevel) {
         this.tank = tank;
-        this.allObjects = allObjects;
-        this.groundLayer = groundLayer;
+        this.gameLevel = gameLevel;
     }
 
     public void update(float deltaTime) {
         tank.update(deltaTime);
 
         if (tank.shouldMakeDecision()) {
-            makeRandomMove();
+            if (tank.shouldShoot()) {
+                Command shootCommand = new ShootCommand(tank, gameLevel);
+                if (shootCommand.canExecute()) {
+                    shootCommand.execute();
+                }
+            } else {
+                makeRandomMove();
+            }
             tank.resetDecisionTimer();
         }
     }
@@ -26,7 +31,7 @@ public class AIController {
     private void makeRandomMove() {
         for (int i = 0; i < 4; i++) {
             Direction direction = tank.getRandomDirection();
-            Command moveCommand = new MoveCommand(tank, direction, allObjects, groundLayer);
+            Command moveCommand = new MoveCommand(tank, direction, gameLevel.getGameObjects(), gameLevel.getGroundLayer());
             if (moveCommand.canExecute()) {
                 moveCommand.execute();
                 break;

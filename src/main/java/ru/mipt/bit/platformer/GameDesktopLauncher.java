@@ -36,11 +36,12 @@ public class GameDesktopLauncher implements ApplicationListener {
     private MapRenderer levelRenderer;
     private TileMovement tileMovement;
     private TiledMapTileLayer groundLayer;
+    private GameLevel gameLevel;
 
     private Player player;
     private List<AITank> aiTanks;
     private List<GameObject> gameObjects;
-    private InputHandler inputHandler;
+    private KeyboardInputHandler inputHandler;
     private PlayerController playerController;
     private GameRenderer gameRenderer;
     private List<AIController> aiControllers;
@@ -60,6 +61,7 @@ public class GameDesktopLauncher implements ApplicationListener {
         levelRenderer = createSingleLayerMapRenderer(level, batch);
         groundLayer = getSingleLayer(level);
         tileMovement = new TileMovement(groundLayer, Interpolation.smooth);
+        gameLevel = new GameLevel(groundLayer);
     }
 
     private void initializeGameObjects() {
@@ -71,7 +73,7 @@ public class GameDesktopLauncher implements ApplicationListener {
         
         Player playerObj = new Player(PLAYER_TEXTURE, new GridPoint2(2, 2));
         player = playerObj;
-        gameObjects.add(new HealthBarDecorator(playerObj, playerObj));
+        gameLevel.addGameObject(new HealthBarDecorator(playerObj, playerObj));
         
         for (int i = 0; i < NUM_AI_TANKS; i++) {
             int x, y;
@@ -83,7 +85,7 @@ public class GameDesktopLauncher implements ApplicationListener {
                 x = random.nextInt(8);
                 y = random.nextInt(6);
                 
-                for (GameObject obj : gameObjects) {
+                for (GameObject obj : gameLevel.getGameObjects()) {
                     if (obj.getCoordinates().x == x && obj.getCoordinates().y == y) {
                         positionOk = false;
                         break;
@@ -96,31 +98,24 @@ public class GameDesktopLauncher implements ApplicationListener {
                 AITank aiTank = new AITank(AI_TANK_TEXTURE, new GridPoint2(x, y));
                 HealthBarDecorator decoratedTank = new HealthBarDecorator(aiTank, aiTank);
                 aiTanks.add(aiTank);
-                gameObjects.add(decoratedTank);
+                gameLevel.addGameObject(decoratedTank);
             }
         }
         
-        gameObjects.add(new Obstacle(OBSTACLE_TEXTURE, new GridPoint2(5, 5)));
-        gameObjects.add(new Obstacle(OBSTACLE_TEXTURE, new GridPoint2(7, 3)));
-
-        positionAllObjects();
-    }
-
-    private void positionAllObjects() {
-        for (GameObject obj : gameObjects) {
-            moveRectangleAtTileCenter(groundLayer, obj.getRectangle(), obj.getCoordinates());
-        }
+        gameLevel.addGameObject(new Obstacle(OBSTACLE_TEXTURE, new GridPoint2(5, 5)));
+        gameLevel.addGameObject(new Obstacle(OBSTACLE_TEXTURE, new GridPoint2(7, 3)));
     }
 
     private void initializeSystems() {
         inputHandler = new KeyboardInputHandler();
         playerController = new PlayerController(player, inputHandler, tileMovement, 
-                                              MOVEMENT_SPEED, gameObjects, groundLayer);
-        gameRenderer = new GameRenderer(batch, levelRenderer);
+                                              MOVEMENT_SPEED, gameLevel);
+        gameRenderer = new GameRenderer(batch, levelRenderer, new ArrayList<>(gameLevel.getGameObjects()));
+        gameLevel.addListener(gameRenderer);
         toggleHealthBarsCommand = new ToggleHealthBarsCommand();
         
         for (AITank aiTank : aiTanks) {
-            AIController aiController = new AIController(aiTank, gameObjects, groundLayer);
+            AIController aiController = new AIController(aiTank, gameLevel);
             aiControllers.add(aiController);
         }
     }
@@ -148,7 +143,8 @@ public class GameDesktopLauncher implements ApplicationListener {
             updateTankMovement(aiController.tank, deltaTime);
         }
 
-        gameRenderer.render(gameObjects);
+        gameLevel.update(deltaTime);
+        gameRenderer.render();
     }
     
     private void updateTankMovement(AITank tank, float deltaTime) {
@@ -173,22 +169,19 @@ public class GameDesktopLauncher implements ApplicationListener {
 
     @Override
     public void resize(int width, int height) {
-        // do not react to window resizing
     }
 
     @Override
     public void pause() {
-        // game doesn't get paused
     }
 
     @Override
     public void resume() {
-        // game doesn't get paused
     }
 
     @Override
     public void dispose() {
-        for (GameObject gameObject : gameObjects) {
+        for (GameObject gameObject : gameLevel.getGameObjects()) {
             gameObject.dispose();
         }
         level.dispose();
@@ -197,7 +190,6 @@ public class GameDesktopLauncher implements ApplicationListener {
 
     public static void main(String[] args) {
         Lwjgl3ApplicationConfiguration config = new Lwjgl3ApplicationConfiguration();
-        // level width: 10 tiles x 128px, height: 8 tiles x 128px
         config.setWindowedMode(1280, 1024);
         new Lwjgl3Application(new GameDesktopLauncher(), config);
     }

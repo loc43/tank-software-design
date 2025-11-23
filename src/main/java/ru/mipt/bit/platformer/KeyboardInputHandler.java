@@ -21,4 +21,8 @@ public class KeyboardInputHandler implements InputHandler {
     public boolean isMoveRight() {
         return Gdx.input.isKeyPressed(RIGHT) || Gdx.input.isKeyPressed(D);
     }
+    
+    public boolean isShoot() {
+        return Gdx.input.isKeyPressed(SPACE);
+    }
 }
