@@ -11,12 +11,10 @@ import com.badlogic.gdx.maps.tiled.TiledMap;
 import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
 import com.badlogic.gdx.maps.tiled.TmxMapLoader;
 import com.badlogic.gdx.math.GridPoint2;
-import com.badlogic.gdx.math.Interpolation;
-import ru.mipt.bit.platformer.util.TileMovement;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.support.ClassPathXmlApplicationContext;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 
 import static com.badlogic.gdx.Input.Keys.L;
 import static com.badlogic.gdx.graphics.GL20.GL_COLOR_BUFFER_BIT;
@@ -24,100 +22,63 @@ import static ru.mipt.bit.platformer.util.GdxGameUtils.*;
 
 public class GameDesktopLauncher implements ApplicationListener {
 
-    private static final float MOVEMENT_SPEED = 0.4f;
-    private static final String LEVEL_PATH = "level.tmx";
-    private static final String PLAYER_TEXTURE = "images/tank_blue.png";
-    private static final String AI_TANK_TEXTURE = "images/tank_red.png";
-    private static final String OBSTACLE_TEXTURE = "images/greenTree.png";
-    private static final int NUM_AI_TANKS = 3;
-
+    private ApplicationContext context;
     private Batch batch;
     private TiledMap level;
     private MapRenderer levelRenderer;
-    private TileMovement tileMovement;
     private TiledMapTileLayer groundLayer;
-    private GameLevel gameLevel;
 
     private Player player;
     private List<AITank> aiTanks;
-    private List<GameObject> gameObjects;
     private KeyboardInputHandler inputHandler;
     private PlayerController playerController;
     private GameRenderer gameRenderer;
     private List<AIController> aiControllers;
     private ToggleHealthBarsCommand toggleHealthBarsCommand;
+    private GameLevel gameLevel;
     private boolean lKeyPressed = false;
 
     @Override
     public void create() {
         batch = new SpriteBatch();
         initializeLevel();
+        
+        context = new ClassPathXmlApplicationContext("application-context.xml");
+        
+        initializeBeans();
         initializeGameObjects();
-        initializeSystems();
     }
 
     private void initializeLevel() {
-        level = new TmxMapLoader().load(LEVEL_PATH);
+        level = new TmxMapLoader().load("level.tmx");
         levelRenderer = createSingleLayerMapRenderer(level, batch);
         groundLayer = getSingleLayer(level);
-        tileMovement = new TileMovement(groundLayer, Interpolation.smooth);
-        gameLevel = new GameLevel(groundLayer);
+    }
+
+    private void initializeBeans() {
+        player = context.getBean("player", Player.class);
+        inputHandler = context.getBean("keyboardInputHandler", KeyboardInputHandler.class);
+        playerController = context.getBean("playerController", PlayerController.class);
+        gameRenderer = context.getBean("gameRenderer", GameRenderer.class);
+        toggleHealthBarsCommand = context.getBean("toggleHealthBarsCommand", ToggleHealthBarsCommand.class);
+        aiTanks = context.getBean("aiTanks", List.class);
+        aiControllers = context.getBean("aiControllers", List.class);
+        gameLevel = context.getBean("gameLevel", GameLevel.class);
+        
+        gameLevel.addListener(gameRenderer);
     }
 
     private void initializeGameObjects() {
-        gameObjects = new ArrayList<>();
-        aiTanks = new ArrayList<>();
-        aiControllers = new ArrayList<>();
+        GameObject playerWithHealthBar = context.getBean("playerWithHealthBar", HealthBarDecorator.class);
+        gameLevel.addGameObject(playerWithHealthBar);
 
-        Random random = new Random();
-        
-        Player playerObj = new Player(PLAYER_TEXTURE, new GridPoint2(2, 2));
-        player = playerObj;
-        gameLevel.addGameObject(new HealthBarDecorator(playerObj, playerObj));
-        
-        for (int i = 0; i < NUM_AI_TANKS; i++) {
-            int x, y;
-            boolean positionOk;
-            int attempts = 0;
-            
-            do {
-                positionOk = true;
-                x = random.nextInt(8);
-                y = random.nextInt(6);
-                
-                for (GameObject obj : gameLevel.getGameObjects()) {
-                    if (obj.getCoordinates().x == x && obj.getCoordinates().y == y) {
-                        positionOk = false;
-                        break;
-                    }
-                }
-                attempts++;
-            } while (!positionOk && attempts < 20);
-            
-            if (positionOk) {
-                AITank aiTank = new AITank(AI_TANK_TEXTURE, new GridPoint2(x, y));
-                HealthBarDecorator decoratedTank = new HealthBarDecorator(aiTank, aiTank);
-                aiTanks.add(aiTank);
-                gameLevel.addGameObject(decoratedTank);
-            }
-        }
-        
-        gameLevel.addGameObject(new Obstacle(OBSTACLE_TEXTURE, new GridPoint2(5, 5)));
-        gameLevel.addGameObject(new Obstacle(OBSTACLE_TEXTURE, new GridPoint2(7, 3)));
-    }
-
-    private void initializeSystems() {
-        inputHandler = new KeyboardInputHandler();
-        playerController = new PlayerController(player, inputHandler, tileMovement, 
-                                              MOVEMENT_SPEED, gameLevel);
-        gameRenderer = new GameRenderer(batch, levelRenderer, new ArrayList<>(gameLevel.getGameObjects()));
-        gameLevel.addListener(gameRenderer);
-        toggleHealthBarsCommand = new ToggleHealthBarsCommand();
-        
         for (AITank aiTank : aiTanks) {
-            AIController aiController = new AIController(aiTank, gameLevel);
-            aiControllers.add(aiController);
+            HealthBarDecorator decoratedTank = new HealthBarDecorator(aiTank, aiTank);
+            gameLevel.addGameObject(decoratedTank);
         }
+
+        gameLevel.addGameObject(new Obstacle("images/greenTree.png", new GridPoint2(5, 5)));
+        gameLevel.addGameObject(new Obstacle("images/greenTree.png", new GridPoint2(7, 3)));
     }
 
     @Override
@@ -140,7 +101,7 @@ public class GameDesktopLauncher implements ApplicationListener {
         
         for (AIController aiController : aiControllers) {
             aiController.update(deltaTime);
-            updateTankMovement(aiController.tank, deltaTime);
+            updateTankMovement(aiController.getTank(), deltaTime);
         }
 
         gameLevel.update(deltaTime);
@@ -148,9 +109,10 @@ public class GameDesktopLauncher implements ApplicationListener {
     }
     
     private void updateTankMovement(AITank tank, float deltaTime) {
-        float progress = continueProgress(tank.getMovementProgress(), deltaTime, MOVEMENT_SPEED);
+        float progress = continueProgress(tank.getMovementProgress(), deltaTime, 0.4f);
         tank.setMovementProgress(progress);
 
+        TileMovement tileMovement = context.getBean("tileMovement", TileMovement.class);
         tileMovement.moveRectangleBetweenTileCenters(
             tank.getRectangle(),
             tank.getCoordinates(),
