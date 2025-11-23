@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+        http://www.springframework.org/schema/beans/spring-beans.xsd">
+
+    <bean id="direction" class="ru.mipt.bit.platformer.Direction" factory-method="valueOf">
+        <constructor-arg value="RIGHT"/>
+    </bean>
+
+    <bean id="player" class="ru.mipt.bit.platformer.Player">
+        <constructor-arg value="images/tank_blue.png"/>
+        <constructor-arg>
+            <bean class="com.badlogic.gdx.math.GridPoint2">
+                <constructor-arg value="2"/>
+                <constructor-arg value="2"/>
+            </bean>
+        </constructor-arg>
+    </bean>
+
+    <bean id="playerWithHealthBar" class="ru.mipt.bit.platformer.HealthBarDecorator">
+        <constructor-arg ref="player"/>
+        <constructor-arg ref="player"/>
+    </bean>
+
+    <bean id="keyboardInputHandler" class="ru.mipt.bit.platformer.KeyboardInputHandler"/>
+
+    <bean id="tileMovement" class="ru.mipt.bit.platformer.util.TileMovement">
+        <constructor-arg ref="groundLayer"/>
+        <constructor-arg>
+            <bean class="com.badlogic.gdx.math.Interpolation" factory-method="smooth"/>
+        </constructor-arg>
+    </bean>
+
+    <bean id="gameLevel" class="ru.mipt.bit.platformer.GameLevel">
+        <constructor-arg ref="groundLayer"/>
+    </bean>
+
+    <bean id="playerController" class="ru.mipt.bit.platformer.PlayerController">
+        <constructor-arg ref="player"/>
+        <constructor-arg ref="keyboardInputHandler"/>
+        <constructor-arg ref="tileMovement"/>
+        <constructor-arg value="0.4"/>
+        <constructor-arg ref="gameLevel"/>
+    </bean>
+
+    <bean id="gameRenderer" class="ru.mipt.bit.platformer.GameRenderer">
+        <constructor-arg ref="batch"/>
+        <constructor-arg ref="levelRenderer"/>
+        <constructor-arg>
+            <list>
+                <ref bean="playerWithHealthBar"/>
+            </list>
+        </constructor-arg>
+    </bean>
+
+    <bean id="toggleHealthBarsCommand" class="ru.mipt.bit.platformer.ToggleHealthBarsCommand"/>
+
+    <bean id="aiTanks" class="java.util.ArrayList">
+        <constructor-arg>
+            <list>
+                <bean class="ru.mipt.bit.platformer.AITank">
+                    <constructor-arg value="images/tank_red.png"/>
+                    <constructor-arg>
+                        <bean class="com.badlogic.gdx.math.GridPoint2">
+                            <constructor-arg value="5"/>
+                            <constructor-arg value="3"/>
+                        </bean>
+                    </constructor-arg>
+                </bean>
+                <bean class="ru.mipt.bit.platformer.AITank">
+                    <constructor-arg value="images/tank_red.png"/>
+                    <constructor-arg>
+                        <bean class="com.badlogic.gdx.math.GridPoint2">
+                            <constructor-arg value="7"/>
+                            <constructor-arg value="1"/>
+                        </bean>
+                    </constructor-arg>
+                </bean>
+            </list>
+        </constructor-arg>
+    </bean>
+
+    <bean id="aiControllers" class="java.util.ArrayList">
+        <constructor-arg>
+            <list>
+                <bean class="ru.mipt.bit.platformer.AIController">
+                    <constructor-arg>
+                        <bean class="ru.mipt.bit.platformer.AITank">
+                            <constructor-arg value="images/tank_red.png"/>
+                            <constructor-arg>
+                                <bean class="com.badlogic.gdx.math.GridPoint2">
+                                    <constructor-arg value="5"/>
+                                    <constructor-arg value="3"/>
+                                </bean>
+                            </constructor-arg>
+                        </bean>
+                    </constructor-arg>
+                    <constructor-arg ref="gameLevel"/>
+                </bean>
+            </list>
+        </constructor-arg>
+    </bean>
+
+</beans>
